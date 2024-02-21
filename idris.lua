@@ -56,6 +56,12 @@ do
             goto _continue
         end
 
+        if argument == "--interactive" then
+            interactive = true
+            arg[i] = false
+            goto _continue
+        end
+
         if argument == "-h" or argument == "--help" then
             Print_usage()
         end
@@ -143,6 +149,7 @@ end
 State = {}
 local has_input = false
 
+::process::
 for i, input in ipairs(arg) do
     if input == false then goto skip_input end
 
@@ -205,6 +212,16 @@ for i, input in ipairs(arg) do
         end
 
         if word == "\0" or (Language.list_separators[word] and DB[Language.infinitive(Words[_+1]:lower())]) then
+            
+            -- Fix using Verb+Pronouns+Noun part 1 (must be here)
+            local remove_second_arg = false
+            local second_arg = ""
+            if State.verb[current_list[1]] and (State.noun == State.verb[current_list[1]]) then
+                second_arg = current_list[1]
+                table.remove(current_list,1)
+                remove_second_arg = true
+            end
+
             if State.noun == nil and (Language.prepositions[State.arguments[1][1]] or Language.pronouns[State.arguments[1][1]]) then
                 table.remove(State.arguments[1],1)
             end
@@ -227,7 +244,7 @@ for i, input in ipairs(arg) do
             -- Fix empty arguments using the fallbacks
             for j = 2, State.max_index, 1 do
                 if #(State.arguments[j] or {}) == 0 then
-                    arguments[j] = table.concat(State.arguments_fallback[j] or {}," ")
+                    arguments[j] = table.concat((State.arguments_fallback[j] or {})," ")
                 end
             end
 
@@ -241,6 +258,11 @@ for i, input in ipairs(arg) do
                 if (#(State.arguments[j] or {}) == 0) and State.old_noun_word ~= State.noun_word and #(State.arguments[j+1] or {}) ~= 0 then
                     arguments[j] = arguments[j+1]
                 end
+            end
+
+            -- Fix using Verb+Pronouns+Noun part 1 (must be here)
+            if remove_second_arg then
+                arguments[2] = arguments[2]:gsub(" "..second_arg.."$","")
             end
 
             -- Allow implicit pronouns
@@ -280,7 +302,7 @@ for i, input in ipairs(arg) do
             State.noun = nil
             State.verb = nil
 
-            if word == "\0" then
+            if word == "\0" and not interactive then
                 State = {}
             end
 
@@ -303,7 +325,6 @@ for i, input in ipairs(arg) do
 
         if State.noun then
             local sub_noun = Find_DB_key(_,State.noun) or State.noun[word]
-
             if sub_noun then
                 State.noun = sub_noun
 
@@ -317,7 +338,6 @@ for i, input in ipairs(arg) do
                 State.current_list_index = index
                 goto continue
             end
-
             if State.noun[Words[_+1]] and (Language.prepositions[word] or Language.pronouns[word]) then
                 goto continue
             end
@@ -334,8 +354,13 @@ for i, input in ipairs(arg) do
     ::skip_input::
 end
 
-if has_input == false then
+if has_input == false and interactive == false then
     Print_usage()
 end
 
 print()
+
+if interactive then
+    arg = {io.read("l")}
+    goto process
+end
